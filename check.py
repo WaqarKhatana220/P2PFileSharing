@@ -104,9 +104,10 @@ def testPutandGet(nodes, files):
 	correct = True
 	for i in range(len(files)):
 		for j in range(len(nodes)):
+			print("total files", len(files), "nodes", len(nodes))
 			if (fileHashes[i] <= nodes[j].key and fileHashes[i] > nodes[j-1].key) or (fileHashes[i] > nodes[-1].key and j == 0):
 				if files[i] not in nodes[j].files:
-					print("file", files[i], "should be in directory", nodes[j])
+					print("file", files[i], "should be in directory", nodes[j].files)
 					correct = False
 	if correct:
 		print ("All files put successfully. \t(+7)")

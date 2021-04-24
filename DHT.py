@@ -51,13 +51,27 @@ class Node:
 		msg = client.recv(2056)
 		# print("messageHere", msg)
 		# print("client", client, "addr", addr)
+		# print("receiving file initiated")
+		# fileName = "localhost_"+str(self.port)+"/"+"fileName"
+		# self.recieveFile(client, fileName)
+		# print("received")
 
 		if msg:
 			msg = loads(msg)
 			# print("message", msg)
-			if type(msg) == int:
+			if type(msg) == str:
+				print("receiving file initiated")
+				fileName = "localhost_"+str(self.port)+"/"+"fileName"
+				# directory = os.path.join(directory, fileName)
+				# print("directory", directory)
+				print("receiveing file", fileName)
+				try:
+					self.recieveFile(client, fileName)
+				except Exception as e:
+					print("recv failed due to:", e)
+				# print("received")
 				
-				print("yes")
+				# print("yes")
 				# self.recieveFile(client, x)
 				# print("received")
 			# print("msg", msg)
@@ -122,19 +136,28 @@ class Node:
 
 				elif msgType == "sendingFile":
 					fileName = msg["fileName"]
-					print("receiving file initiated")
+					# print("receiving file initiated")
 					fileName = "localhost_"+str(self.port)+"/"+fileName
 					# directory = os.path.join(directory, fileName)
 					# print("directory", directory)
-					print("receiveing file", fileName)
+					print("receiveing file", fileName, "at", self.port)
 					self.recieveFile(client, fileName)
-					print("received")
+					# print("received")
 
 
+				elif msgType == "findItsNode":
+					fileName = msg["fileName"]
+					successorHost, successorPort = self.fileLookup(fileName)
+					msg = {
+						"type":"itsNode",
+						"addr":(successorHost, successorPort)
+					}
+					
 
 
+					
 				elif msgType == "findItsSuccessor":
-					print("type heere", type(msg["addr"]))
+					# print("type heere", type(msg["addr"]))
 					if type(msg["addr"]) == list:
 						host, port = msg["addr"]
 						successorHost, successorPort, predecessorHost, predecessorPort = self.lookup((host, port))
@@ -152,14 +175,21 @@ class Node:
 								"predecessor":(predecessorHost, predecessorPort)
 							}
 					
-					else:
+					elif type(msg["addr"])==str:
 						fileName = msg["addr"]
 						successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(fileName)
-						msg = {
-							"type":"hisNeighbors",
-							"successor": (successorHost, successorPort),
-							"predecessor":(predecessorHost, predecessorPort)
-						}
+						if self.host == successorHost and self.port == successorPort:
+							msg = {
+								"type":"hisNeighbors",
+								"successor": (self.host, self.port),
+								"predecessor":self.predecessor
+								}
+						else:
+							msg = {
+								"type":"hisNeighbors",
+								"successor": (successorHost, successorPort),
+								"predecessor":(predecessorHost, predecessorPort)
+							}
 				elif msgType == "whoHasHighestHash":
 					myHash = self.hasher(self.host+str(self.port))
 					highestHash, highestHashAddr, successor, predecessor = self.findHighest()
@@ -351,7 +381,7 @@ class Node:
 			For a node: self.hasher(node.host+str(node.port))
 			For a file: self.hasher(file)
 		'''
-		print("type", type(incomingAddr))
+		# print("type", type(incomingAddr))
 		myHash = self.hasher(self.host+str(self.port))
 		mySuccessorHash = self.hasher(self.successor[0]+str(self.successor[1]))
 		myPredecessorHash = self.hasher(self.predecessor[0]+str(self.predecessor[1]))
@@ -363,7 +393,7 @@ class Node:
 			incomingNodeHash = self.hasher(incomingAddr)
 		# print("myHash", myHash, "nodeHash", incomingNodeHash, "predecessorHash", myPredecessorHash)
 		if incomingNodeHash < myHash and incomingNodeHash > myPredecessorHash: # i am his successor
-			# print("found")
+			print("successor returned", self.port)
 			predHost, predPort = self.predecessor
 			return(self.host, self.port, predHost, predPort)
 		else:
@@ -388,6 +418,7 @@ class Node:
 			if msgType == 'hisNeighbors':
 				successorHost, successorPort = msg["successor"]
 				predHost, predPort = msg["predecessor"]
+				# print("successor returned", successorPort)
 				return(successorHost, successorPort, predHost, predPort)
 
 			sock.close()
@@ -395,8 +426,28 @@ class Node:
 
 
 
+	def fileLookup(self, fileName):
+		myHash = self.hasher(self.host+str(self.port))
+		fileHash = self.hasher(fileName)
+		myPredecessorHash = self.hasher(self.predecessor[0]+str(self.predecessor[1]))
 
+		if fileHash < myHash and fileHash > myPredecessorHash:
+			return self.host, self.port
+		else:
+			sock = socket.socket()
+			sock.connect(self.successor)
+			msg = {
+				"type":"findItsNode",
+				"fileName":fileName
+			}
+			msgSend = dumps(msg)
+			sock.sendto(msgSend.encode('utf-8'), self.successor)
 
+			msgRcv = loads(sock.recv(1024))
+			if msgRcv["type"] == "itsNode":
+				nodeHost, nodePort = msgRcv["addr"]
+				return nodeHost, nodePort
+			sock.close()
 
 	def put(self, fileName):
 		'''
@@ -415,39 +466,49 @@ class Node:
 		lowestHash, laddr, lsuccessor, lpredecessor = self.findLowest()
 		fileHash = self.hasher(fileName)
 		if fileHash > highestHash:
+			# print("fileHash", fileHash, "highestHash",highestHash, "map to:", haddr[1])
 			sock = socket.socket()
 			sock.connect(hsuccessor)
+			print("sending to highest hash", hsuccessor)
+			print("highestHash", highestHash, "filehash", fileHash)
 			msg = {
 				"type":"sendingFile",
 				"fileName":fileName
 			}
 			msgSend = dumps(msg)
 			sock.sendto(msgSend.encode('utf-8'), hsuccessor)
-			# time.sleep(2)
+			time.sleep(5)
 			# directory = "/localhost_"+str(hsuccessor[1])
 			# fileName = os.path.join(directory, fileName)
+			# print("sending to:", hsuccessor[1])
 			self.sendFile(sock, fileName)
-			print("sending")
+			# print("sending")
 			sock.close()
-			print("sent 1")
+			# print("sent 1")
 		elif fileHash < lowestHash:
+			# print("fileHash", fileHash, "lowestHash",lowesttHash, "map to:", laddr[1])
+			print("sending to lowest hash", laddr)
+			print("lowestHash", lowestHash, "filehash", fileHash)
 			sock = socket.socket()
-			sock.connect(lsuccessor)
+			sock.connect(laddr)
 			msg = {
 				"type":"sendingFile",
 				"fileName":fileName
 			}
 			msgSend = dumps(msg)
-			sock.sendto(msgSend.encode('utf-8'), lsuccessor)
-			# time.sleep(2)
-			directory = "/localhost_"+str(lsuccessor[1])
+			sock.sendto(msgSend.encode('utf-8'), laddr)
+			time.sleep(5)
+			# directory = "/localhost_"+str(lsuccessor[1])
 			# fileName = os.path.join(directory, fileName)
+			# print("sending to:", lsuccessor[1])
 			self.sendFile(sock, fileName)
-			print("sending")
+			# print("sending")
 			sock.close()
-			print("sent 2")
+			# print("sent 2")
 		else:
 			successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(fileName)
+			print("successor got", successorPort)
+			print("fileHash", fileHash, "successorHash", self.hasher(successorHost+str(successorPort)))
 			sock = socket.socket()
 			sock.connect((successorHost, successorPort))
 			msg = {
@@ -456,13 +517,15 @@ class Node:
 			}
 			msgSend = dumps(msg)
 			sock.sendto(msgSend.encode('utf-8'), (successorHost, successorPort))
-			#time.sleep(2)
-			directory = "/localhost_"+str(successorPort)
+			time.sleep(5)
+			# directory = "/localhost_"+str(successorPort)
 			# fileName = os.path.join(directory, fileName)
+			print("sending to:", successorPort)
+
 			self.sendFile(sock, fileName)
-			print("sending")
-			sock.close()
-			print("sent 1")
+			# print("sending")
+			# sock.close()
+			# print("sent 3")
 
 
 	def get(self, fileName):
@@ -486,8 +549,11 @@ class Node:
 						fileName => file's name including its path e.g. NetCen/PA3/file.py
 		'''
 		fileSize = os.path.getsize(fileName)
+		# print("sending 1")
 		soc.send(str(fileSize).encode('utf-8'))
+		# print("sending 2")
 		soc.recv(1024).decode('utf-8')
+		# print("sending 3")
 		with open(fileName, "rb") as file:
 			contentChunk = file.read(1024)
 			while contentChunk!="".encode('utf-8'):
@@ -500,8 +566,11 @@ class Node:
 			Arguments:	soc => a socket object
 						fileName => file's name including its path e.g. NetCen/PA3/file.py
 		'''
+		# print("receiving 0")
 		fileSize = int(soc.recv(1024).decode('utf-8'))
+		# print("receiving 1")
 		soc.send("ok".encode('utf-8'))
+		# print("receiving 2")
 		contentRecieved = 0
 		file = open(fileName, "wb")
 		while contentRecieved < fileSize:
