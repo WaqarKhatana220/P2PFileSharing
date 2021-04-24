@@ -64,7 +64,6 @@ def testJoin(nodes,p):
 		points += 3
 	else:
 		print ("Case 2 failed. \t(0)")
-
 	print ("Case 3: Checking for general case.")
 	nodes[2].join(("localhost", p[0]))
 	time.sleep(2)
@@ -78,6 +77,9 @@ def testJoin(nodes,p):
 		if nodes[i].successor == None:
 			correct = False
 		elif nodes[i].successor[1] == nodes[(i+1) % len(nodes)].port and nodes[i].predecessor[1] == nodes[i-1].port:
+			print("correct:", nodes[i], "successor", nodes[(i+1) % len(nodes)].port, "predecessor", nodes[i-1].port)
+			print("your:", nodes[i], "successor", nodes[i].successor[1], "predecessor", nodes[i].predecessor[1])
+						
 			continue
 		else:
 			correct = False

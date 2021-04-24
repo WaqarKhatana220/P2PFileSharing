@@ -1,4 +1,4 @@
-import socket 
+import socket
 import threading
 import os
 import time
@@ -25,8 +25,10 @@ class Node:
 		DO NOT EDIT ANYTHING ABOVE THIS LINE
 		'''
 		# Set value of the following variables appropriately to pass Intialization test
-		self.successor = (host, port)
 		self.predecessor = (host, port)
+		self.successor = (host, port)
+		self.highestHash = self.hasher(self.host+str(self.port))
+		self.lowestHash = self.hasher(self.host+str(self.port))
 
 		# additional state variables
 
@@ -46,20 +48,79 @@ class Node:
 		'''
 		 Function to handle each inbound connection, called as a thread from the listener.
 		'''
-		try:
-			msg = client.recv(1024)
-			if msg:
-				msg = loads(msg)
-				# print("msg", msg)
-				msgType = msg["type"]
-				if msgType == "successor":
-					self.successor = (msg["host"], msg["port"])
-					self.predecessor = (msg["host"], msg["port"])
-					# print("self.addr", self.host, self.port)
-					# print("self.successor",self.successor)
-					# print("self.predecessor", self.predecessor)
-		except Exception as e:
-			print("exception raised", e)
+		# try:
+		msg = client.recv(2056)
+		if msg:
+			msg = loads(msg)
+			# print("msg", msg)
+			msgType = msg["type"]
+			if msgType == "abMereKoToAndarLo":
+
+				host, port = msg["addr"]
+				incomingAddr = (host, port)
+				# print("incomingAddr", incomingAddr)
+				myHash = self.hasher(self.host+str(self.port))
+				mySuccessorHash = self.hasher(self.successor[0]+str(self.successor[1]))
+				myPredecessorHash = self.hasher(self.predecessor[0]+str(self.predecessor[1]))
+				incomingNodeHash = self.hasher(host+str(port))
+				if myHash == mySuccessorHash and myHash == myPredecessorHash:
+					self.successor = incomingAddr
+					self.predecessor = incomingAddr
+					mySuccessorHash = self.hasher(self.successor[0]+str(self.successor[1]))
+					
+					msg = {
+					"type":"yourNeighbors",
+					"successor": (self.host, self.port),
+					"predecessor":(self.host, self.port)
+					}
+				else:
+					# print("self.addr", (self.host, self.port), "self.successor", self.successor, "self.predecessor", self.predecessor)
+					successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(incomingAddr)
+					# print("successorHost", successorHost,"successorPort", successorPort)
+					if self.host == successorHost and self.port == successorPort:
+						msg = {
+							"type":"yourNeighbors",
+							"successor": (self.host, self.port),
+							"predecessor":self.predecessor
+							}
+						self.predecessor = (host, port)
+					else:
+						msg = {
+							"type":"yourNeighbors",
+							"successor": (successorHost, successorPort),
+							"predecessor":(predecessorHost, predecessorPort)
+							}
+			elif msgType == "updateYourSuccessor":
+				successorHost, successorPort = msg["successor"]
+				self.successor = (successorHost, successorPort)
+
+			elif msgType == "findItsSuccessor":
+				print("finding")
+				host, port = msg["addr"]
+				successorHost, successorPort, predecessorHost, predecessorPort = self.lookup((host, port))
+				if self.host == successorHost and self.port == successorPort:
+					msg = {
+						"type":"hisNeighbors",
+						"successor": (self.host, self.port),
+						"predecessor":self.predecessor
+						}
+					self.predecessor = (host, port)
+				else:
+					msg = {
+						"type":"hisNeighbors",
+						"successor": (successorHost, successorPort),
+						"predecessor":(predecessorHost, predecessorPort)
+					}
+
+			msg = dumps(msg)
+			client.send(msg.encode('utf-8'))
+			client.close()
+
+
+
+
+		# except Exception as e:
+		# 	print("exception raiseded", e)
 
 
 
@@ -87,35 +148,57 @@ class Node:
 		This function handles the logic of a node joining. This function should do a lot of things such as:
 		Update successor, predecessor, getting files, back up files. SEE MANUAL FOR DETAILS.
 		'''
-		self.predecessor =joiningAddr
+
 		if joiningAddr == "":
 			self.successor = (self.host, self.port)
 			self.predecessor = (self.host, self.port)
+
 		else:
-			sock = socket.socket()
 			host, port = joiningAddr
-			sock.connect((host, port))
-			successorHost, successorPort = self.lookup((host, port))
-			if successorHost == self.host and successorPort == self.port:
-				self.predecessor = (host, port)
-				self.successor = (host, port)
-				message = {
-					"type" : "successor",
-					"host" : successorHost,
-					"port" : successorPort
-				}
-				# print(dumps(message))
-				message = dumps(message)
-				try:
-					sock.send(message.encode('utf-8'), port)
-				except:
-					print("socket communication failed")
-			
-		
+			sock = socket.socket()
+			sock.connect(joiningAddr)
+			msg = {
+				"type":"abMereKoToAndarLo",
+				"addr":(self.host, self.port)
+			}
+			msgSend = dumps(msg)
+			try:
+				sock.sendto(msgSend.encode('utf-8'), (host, port))
+			except Exception as e:
+				print("socket communication error:", e)
+
+			msgRecv = loads(sock.recv(1024))
+			msgType = msgRecv["type"]
+			if msgType == "yourNeighbors":
+				print("neighbors received")
+				successorHost, successorPort = msgRecv["successor"]
+				predecessorHost, predecessorPort = msgRecv["predecessor"]
+				self.successor = (successorHost, successorPort)
+				self.predecessor = (predecessorHost, predecessorPort)
+				self.tellPredecessor(self.predecessor)
+			time.sleep(2)
+			sock.close()
 
 
 
-	def lookup(self, joiningAddr):
+
+
+	def tellPredecessor(self, predecessor):
+		sock = socket.socket()
+		sock.connect(predecessor)
+		msg = {
+			"type":"updateYourSuccessor",
+			"successor":(self.host, self.port)
+		}
+		msg = dumps(msg)
+		try:
+			sock.sendto(msg.encode('utf-8'), predecessor)
+		except Exception as e:
+			print("socket error", e)
+		sock.close()
+
+
+	def lookup(self, incomingAddr):
 		#I am the only node in the network
 		'''
 		DO NOT EDIT THIS FUNCTION.
@@ -123,18 +206,47 @@ class Node:
 			For a node: self.hasher(node.host+str(node.port))
 			For a file: self.hasher(file)
 		'''
-		incomigHost, incomingPort = joiningAddr
+		host, port = incomingAddr
 		myHash = self.hasher(self.host+str(self.port))
 		mySuccessorHash = self.hasher(self.successor[0]+str(self.successor[1]))
 		myPredecessorHash = self.hasher(self.predecessor[0]+str(self.predecessor[1]))
-		incomingNodeHash = self.hasher(incomigHost+str(incomingPort))
+		incomingNodeHash = self.hasher(host+str(port))
+		print("myHash", myHash, "nodeHash", incomingNodeHash, "predecessorHash", myPredecessorHash)
+		if incomingNodeHash < myHash and incomingNodeHash > myPredecessorHash: # i am his successor
+			print("found")
+			predHost, predPort = self.predecessor
+			return(self.host, self.port, predHost, predPort)
+		else:
+			# print("1")
+			sock = socket.socket()
+			sock.connect(self.successor)
+			# print("2")
+
+			msg = {
+				"type":"findItsSuccessor",
+				"addr":incomingAddr
+			}
+			# print("3")
+			msg = dumps(msg)
+			sock.sendto(msg.encode('utf-8'), self.successor)
+			# print("4")
+
+			msg = loads(sock.recv(2056))
+			msgType = msg["type"]
+			# print("5")
+
+			if msgType == 'hisNeighbors':
+				successorHost, successorPort = msg["successor"]
+				predHost, predPort = msg["predecessor"]
+
+				print("1")
+				return(successorHost, successorPort, predHost, predPort)
+
+			sock.close()
 
 
-		if self.successor == (self.host, self.port): # I am the only node
-			print("1 node")
-			return (self.host, self.port)
-		else: # more than 2 nodes
-			print("joiningAddr", joiningAddr)
+
+
 
 
 
@@ -144,14 +256,14 @@ class Node:
 		Responsible node should then replicate the file on appropriate node. SEE MANUAL FOR DETAILS. Responsible node should save the files
 		in directory given by host_port e.g. "localhost_20007/file.py".
 		'''
-		
+
 	def get(self, fileName):
 		'''
 		This function finds node responsible for file given by fileName, gets the file from responsible node, saves it in current directory
 		i.e. "./file.py" and returns the name of file. If the file is not present on the network, return None.
 		'''
 
-		
+
 	def leave(self):
 		'''
 		When called leave, a node should gracefully leave the network i.e. it should update its predecessor that it is leaving
@@ -160,7 +272,7 @@ class Node:
 		'''
 
 	def sendFile(self, soc, fileName):
-		''' 
+		'''
 		Utility function to send a file over a socket
 			Arguments:	soc => a socket object
 						fileName => file's name including its path e.g. NetCen/PA3/file.py
@@ -194,4 +306,4 @@ class Node:
 		# DO NOT EDIT THIS, used for code testing
 		self.stop = True
 
-		
+
