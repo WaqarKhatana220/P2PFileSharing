@@ -4,7 +4,6 @@ import os
 import time
 import hashlib
 from json import dumps, loads
-from packet import Packet
 
 class Node:
 	def __init__(self, host, port):
@@ -50,121 +49,145 @@ class Node:
 		'''
 		# try:
 		msg = client.recv(2056)
+		# print("messageHere", msg)
+		# print("client", client, "addr", addr)
+
 		if msg:
 			msg = loads(msg)
+			# print("message", msg)
+			if type(msg) == int:
+				
+				print("yes")
+				# self.recieveFile(client, x)
+				# print("received")
 			# print("msg", msg)
-			msgType = msg["type"]
-			if msgType == "abMereKoToAndarLo":
+			else:
+				msgType = msg["type"]
+				if msgType == "abMereKoToAndarLo":
 
-				host, port = msg["addr"]
-				incomingAddr = (host, port)
-				myHash = self.hasher(self.host+str(self.port))
-				mySuccessorHash = self.hasher(self.successor[0]+str(self.successor[1]))
-				myPredecessorHash = self.hasher(self.predecessor[0]+str(self.predecessor[1]))
-				incomingNodeHash = self.hasher(host+str(port))
+					host, port = msg["addr"]
+					incomingAddr = (host, port)
+					myHash = self.hasher(self.host+str(self.port))
+					mySuccessorHash = self.hasher(self.successor[0]+str(self.successor[1]))
+					myPredecessorHash = self.hasher(self.predecessor[0]+str(self.predecessor[1]))
+					incomingNodeHash = self.hasher(host+str(port))
 
-				if myHash == mySuccessorHash and myHash == myPredecessorHash:
-					self.successor = incomingAddr
-					self.predecessor = incomingAddr					
-					msg = {
-					"type":"yourNeighbors",
-					"successor": (self.host, self.port),
-					"predecessor":(self.host, self.port)
-					}
-				else:
-					# print("self.addr", (self.host, self.port), "self.successor", self.successor, "self.predecessor", self.predecessor)
-					highestHash, haddr, hsuccessor, hpredecessor = self.findHighest()
-					lowestHash, laddr, lsuccessor, lpredecessor = self.findLowest()
-					if incomingNodeHash > highestHash:
+					if myHash == mySuccessorHash and myHash == myPredecessorHash:
+						self.successor = incomingAddr
+						self.predecessor = incomingAddr					
 						msg = {
-							"type":"yourNeighbors",
-							"successor": hsuccessor,
-							"predecessor":haddr
-							}
-					elif incomingNodeHash < lowestHash:
-						msg = {
-							"type":"yourNeighbors",
-							"successor": laddr,
-							"predecessor":lpredecessor
-							}
+						"type":"yourNeighbors",
+						"successor": (self.host, self.port),
+						"predecessor":(self.host, self.port)
+						}
 					else:
-						successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(incomingAddr)
-						# print("successorHost", successorHost,"successorPort", successorPort)
-						if self.host == successorHost and self.port == successorPort:
+						# print("self.addr", (self.host, self.port), "self.successor", self.successor, "self.predecessor", self.predecessor)
+						highestHash, haddr, hsuccessor, hpredecessor = self.findHighest()
+						lowestHash, laddr, lsuccessor, lpredecessor = self.findLowest()
+						if incomingNodeHash > highestHash:
 							msg = {
 								"type":"yourNeighbors",
+								"successor": hsuccessor,
+								"predecessor":haddr
+								}
+						elif incomingNodeHash < lowestHash:
+							msg = {
+								"type":"yourNeighbors",
+								"successor": laddr,
+								"predecessor":lpredecessor
+								}
+						else:
+							successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(incomingAddr)
+							# print("successorHost", successorHost,"successorPort", successorPort)
+							if self.host == successorHost and self.port == successorPort:
+								msg = {
+									"type":"yourNeighbors",
+									"successor": (self.host, self.port),
+									"predecessor":self.predecessor
+									}
+								self.predecessor = (host, port)
+							else:
+								msg = {
+									"type":"yourNeighbors",
+									"successor": (successorHost, successorPort),
+									"predecessor":(predecessorHost, predecessorPort)
+									}
+				elif msgType == "updateYourSuccessor":
+					successorHost, successorPort = msg["successor"]
+					self.successor = (successorHost, successorPort)
+				elif msgType == "updateYourPredecessor":
+					predecessorHost, predecessorPort = msg["predecessor"]
+					self.predecessor = (predecessorHost, predecessorPort)
+
+
+				elif msgType == "sendingFile":
+					fileName = msg["fileName"]
+					print("receiving file initiated")
+					fileName = "localhost_"+str(self.port)+"/"+fileName
+					# directory = os.path.join(directory, fileName)
+					# print("directory", directory)
+					print("receiveing file", fileName)
+					self.recieveFile(client, fileName)
+					print("received")
+
+
+
+
+				elif msgType == "findItsSuccessor":
+					print("type heere", type(msg["addr"]))
+					if type(msg["addr"]) == list:
+						host, port = msg["addr"]
+						successorHost, successorPort, predecessorHost, predecessorPort = self.lookup((host, port))
+						if self.host == successorHost and self.port == successorPort:
+							msg = {
+								"type":"hisNeighbors",
 								"successor": (self.host, self.port),
 								"predecessor":self.predecessor
 								}
 							self.predecessor = (host, port)
 						else:
 							msg = {
-								"type":"yourNeighbors",
+								"type":"hisNeighbors",
 								"successor": (successorHost, successorPort),
 								"predecessor":(predecessorHost, predecessorPort)
-								}
-			elif msgType == "updateYourSuccessor":
-				successorHost, successorPort = msg["successor"]
-				self.successor = (successorHost, successorPort)
-			elif msgType == "updateYourPredecessor":
-				predecessorHost, predecessorPort = msg["predecessor"]
-				self.predecessor = (predecessorHost, predecessorPort)
-
-			elif msgType == "findItsSuccessor":
-				print("type heere", type(msg["addr"]))
-				if type(msg["addr"]) == list:
-					host, port = msg["addr"]
-					successorHost, successorPort, predecessorHost, predecessorPort = self.lookup((host, port))
-					if self.host == successorHost and self.port == successorPort:
-						msg = {
-							"type":"hisNeighbors",
-							"successor": (self.host, self.port),
-							"predecessor":self.predecessor
 							}
-						self.predecessor = (host, port)
+					
 					else:
+						fileName = msg["addr"]
+						successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(fileName)
 						msg = {
 							"type":"hisNeighbors",
 							"successor": (successorHost, successorPort),
 							"predecessor":(predecessorHost, predecessorPort)
 						}
-				
-				else:
-					fileName = msg["addr"]
-					successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(fileName)
+				elif msgType == "whoHasHighestHash":
+					myHash = self.hasher(self.host+str(self.port))
+					highestHash, highestHashAddr, successor, predecessor = self.findHighest()
 					msg = {
-						"type":"hisNeighbors",
-						"successor": (successorHost, successorPort),
-						"predecessor":(predecessorHost, predecessorPort)
+						"type":"highestHash",
+						"value":highestHash,
+						"addr":highestHashAddr,
+						"successor":successor,
+						"predecessor":predecessor
 					}
-			elif msgType == "whoHasHighestHash":
-				myHash = self.hasher(self.host+str(self.port))
-				highestHash, highestHashAddr, successor, predecessor = self.findHighest()
-				msg = {
-					"type":"highestHash",
-					"value":highestHash,
-					"addr":highestHashAddr,
-					"successor":successor,
-					"predecessor":predecessor
-				}
 
-			elif msgType == "whoHasLowestHash":
-				myHash = self.hasher(self.host+str(self.port))
-				lowestHash, lowestHashAddr, successor, predecessor = self.findLowest()
-				msg = {
-					"type":"lowestHash",
-					"value":lowestHash,
-					"addr":lowestHashAddr,
-					"successor":successor,
-					"predecessor":predecessor
-				}
-					
+				elif msgType == "whoHasLowestHash":
+					myHash = self.hasher(self.host+str(self.port))
+					lowestHash, lowestHashAddr, successor, predecessor = self.findLowest()
+					msg = {
+						"type":"lowestHash",
+						"value":lowestHash,
+						"addr":lowestHashAddr,
+						"successor":successor,
+						"predecessor":predecessor
+					}
+						
 
 
 
-			msg = dumps(msg)
-			client.send(msg.encode('utf-8'))
-			client.close()
+				msg = dumps(msg)
+				client.send(msg.encode('utf-8'))
+				client.close()
 
 
 
@@ -387,29 +410,57 @@ class Node:
 			For a node: self.hasher(node.host+str(node.port))
 			For a file: self.hasher(file)
 		'''
+		print("put file", fileName)
 		highestHash, haddr, hsuccessor, hpredecessor = self.findHighest()
 		lowestHash, laddr, lsuccessor, lpredecessor = self.findLowest()
 		fileHash = self.hasher(fileName)
 		if fileHash > highestHash:
 			sock = socket.socket()
 			sock.connect(hsuccessor)
+			msg = {
+				"type":"sendingFile",
+				"fileName":fileName
+			}
+			msgSend = dumps(msg)
+			sock.sendto(msgSend.encode('utf-8'), hsuccessor)
+			# time.sleep(2)
+			# directory = "/localhost_"+str(hsuccessor[1])
+			# fileName = os.path.join(directory, fileName)
 			self.sendFile(sock, fileName)
-			time.sleep(2)
+			print("sending")
 			sock.close()
 			print("sent 1")
 		elif fileHash < lowestHash:
 			sock = socket.socket()
 			sock.connect(lsuccessor)
+			msg = {
+				"type":"sendingFile",
+				"fileName":fileName
+			}
+			msgSend = dumps(msg)
+			sock.sendto(msgSend.encode('utf-8'), lsuccessor)
+			# time.sleep(2)
+			directory = "/localhost_"+str(lsuccessor[1])
+			# fileName = os.path.join(directory, fileName)
 			self.sendFile(sock, fileName)
-			time.sleep(2)
+			print("sending")
 			sock.close()
 			print("sent 2")
 		else:
 			successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(fileName)
 			sock = socket.socket()
 			sock.connect((successorHost, successorPort))
+			msg = {
+				"type":"sendingFile",
+				"fileName":fileName
+			}
+			msgSend = dumps(msg)
+			sock.sendto(msgSend.encode('utf-8'), (successorHost, successorPort))
+			#time.sleep(2)
+			directory = "/localhost_"+str(successorPort)
+			# fileName = os.path.join(directory, fileName)
 			self.sendFile(sock, fileName)
-			time.sleep(2)
+			print("sending")
 			sock.close()
 			print("sent 1")
 
