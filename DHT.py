@@ -73,12 +73,19 @@ class Node:
 					}
 				else:
 					# print("self.addr", (self.host, self.port), "self.successor", self.successor, "self.predecessor", self.predecessor)
-					highestHash, addr, successor, predecessor = self.findHighest()
+					highestHash, haddr, hsuccessor, hpredecessor = self.findHighest()
+					lowestHash, laddr, lsuccessor, lpredecessor = self.findLowest()
 					if incomingNodeHash > highestHash:
 						msg = {
 							"type":"yourNeighbors",
-							"successor": successor,
-							"predecessor":addr
+							"successor": hsuccessor,
+							"predecessor":haddr
+							}
+					elif incomingNodeHash < lowestHash:
+						msg = {
+							"type":"yourNeighbors",
+							"successor": laddr,
+							"predecessor":lpredecessor
 							}
 					else:
 						successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(incomingAddr)
@@ -104,7 +111,6 @@ class Node:
 				self.predecessor = (predecessorHost, predecessorPort)
 
 			elif msgType == "findItsSuccessor":
-				print("finding")
 				host, port = msg["addr"]
 				successorHost, successorPort, predecessorHost, predecessorPort = self.lookup((host, port))
 				if self.host == successorHost and self.port == successorPort:
@@ -121,14 +127,23 @@ class Node:
 						"predecessor":(predecessorHost, predecessorPort)
 					}
 			elif msgType == "whoHasHighestHash":
-				print("message reveived")
 				myHash = self.hasher(self.host+str(self.port))
 				highestHash, highestHashAddr, successor, predecessor = self.findHighest()
-				print("vaue returned")
 				msg = {
 					"type":"highestHash",
 					"value":highestHash,
 					"addr":highestHashAddr,
+					"successor":successor,
+					"predecessor":predecessor
+				}
+
+			elif msgType == "whoHasLowestHash":
+				myHash = self.hasher(self.host+str(self.port))
+				lowestHash, lowestHashAddr, successor, predecessor = self.findLowest()
+				msg = {
+					"type":"lowestHash",
+					"value":lowestHash,
+					"addr":lowestHashAddr,
 					"successor":successor,
 					"predecessor":predecessor
 				}
@@ -196,7 +211,7 @@ class Node:
 				msgRecv = loads(sock.recv(1024))
 				msgType = msgRecv["type"]
 				if msgType == "yourNeighbors":
-					print("neighbors received")
+					# print("neighbors received")
 					successorHost, successorPort = msgRecv["successor"]
 					predecessorHost, predecessorPort = msgRecv["predecessor"]
 					self.successor = (successorHost, successorPort)
@@ -255,20 +270,44 @@ class Node:
 			
 			msgSend = dumps(msg)
 			sock.sendto(msgSend.encode('utf-8'), self.successor)
-			print("sent")
 			try:
 				msgRcv = loads(sock.recv(2056))
 			except:
 				print("no message to rcv")
 			msgType = msgRcv["type"]
-			print("1")
 			if msgType == "highestHash":
 				highestHash = msgRcv["value"]
 				host, port = msgRcv["addr"]
 				successorHost, successorPort = msgRcv["successor"]
 				predecessorHost, predecessorPort = msgRcv["predecessor"]
-				print("2")
 				return highestHash, (host, port), (successorHost, successorPort), (predecessorHost, predecessorPort)
+
+	def findLowest(self):
+		myHash = self.hasher(self.host+str(self.port))
+		myPredecessorHash = self.hasher(self.predecessor[0]+str(self.predecessor[1]))
+		if myHash <= myPredecessorHash:
+			return myHash, (self.host, self.port), self.successor, self.predecessor
+		
+		else:
+			sock = socket.socket()
+			sock.connect(self.predecessor)
+			msg = {
+				"type":"whoHasLowestHash"
+			}
+			
+			msgSend = dumps(msg)
+			sock.sendto(msgSend.encode('utf-8'), self.predecessor)
+			try:
+				msgRcv = loads(sock.recv(2056))
+			except:
+				print("no message to rcv")
+			msgType = msgRcv["type"]
+			if msgType == "lowestHash":
+				lowestHash = msgRcv["value"]
+				host, port = msgRcv["addr"]
+				successorHost, successorPort = msgRcv["successor"]
+				predecessorHost, predecessorPort = msgRcv["predecessor"]
+				return lowestHash, (host, port), (successorHost, successorPort), (predecessorHost, predecessorPort)
 
 	def lookup(self, incomingAddr):
 		#I am the only node in the network
@@ -283,9 +322,9 @@ class Node:
 		mySuccessorHash = self.hasher(self.successor[0]+str(self.successor[1]))
 		myPredecessorHash = self.hasher(self.predecessor[0]+str(self.predecessor[1]))
 		incomingNodeHash = self.hasher(host+str(port))
-		print("myHash", myHash, "nodeHash", incomingNodeHash, "predecessorHash", myPredecessorHash)
+		# print("myHash", myHash, "nodeHash", incomingNodeHash, "predecessorHash", myPredecessorHash)
 		if incomingNodeHash < myHash and incomingNodeHash > myPredecessorHash: # i am his successor
-			print("found")
+			# print("found")
 			predHost, predPort = self.predecessor
 			return(self.host, self.port, predHost, predPort)
 		else:
@@ -310,8 +349,6 @@ class Node:
 			if msgType == 'hisNeighbors':
 				successorHost, successorPort = msg["successor"]
 				predHost, predPort = msg["predecessor"]
-
-				print("1")
 				return(successorHost, successorPort, predHost, predPort)
 
 			sock.close()
