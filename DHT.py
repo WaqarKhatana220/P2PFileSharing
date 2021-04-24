@@ -111,16 +111,27 @@ class Node:
 				self.predecessor = (predecessorHost, predecessorPort)
 
 			elif msgType == "findItsSuccessor":
-				host, port = msg["addr"]
-				successorHost, successorPort, predecessorHost, predecessorPort = self.lookup((host, port))
-				if self.host == successorHost and self.port == successorPort:
-					msg = {
-						"type":"hisNeighbors",
-						"successor": (self.host, self.port),
-						"predecessor":self.predecessor
+				print("type heere", type(msg["addr"]))
+				if type(msg["addr"]) == list:
+					host, port = msg["addr"]
+					successorHost, successorPort, predecessorHost, predecessorPort = self.lookup((host, port))
+					if self.host == successorHost and self.port == successorPort:
+						msg = {
+							"type":"hisNeighbors",
+							"successor": (self.host, self.port),
+							"predecessor":self.predecessor
+							}
+						self.predecessor = (host, port)
+					else:
+						msg = {
+							"type":"hisNeighbors",
+							"successor": (successorHost, successorPort),
+							"predecessor":(predecessorHost, predecessorPort)
 						}
-					self.predecessor = (host, port)
+				
 				else:
+					fileName = msg["addr"]
+					successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(fileName)
 					msg = {
 						"type":"hisNeighbors",
 						"successor": (successorHost, successorPort),
@@ -317,11 +328,16 @@ class Node:
 			For a node: self.hasher(node.host+str(node.port))
 			For a file: self.hasher(file)
 		'''
-		host, port = incomingAddr
+		print("type", type(incomingAddr))
 		myHash = self.hasher(self.host+str(self.port))
 		mySuccessorHash = self.hasher(self.successor[0]+str(self.successor[1]))
 		myPredecessorHash = self.hasher(self.predecessor[0]+str(self.predecessor[1]))
-		incomingNodeHash = self.hasher(host+str(port))
+		if type(incomingAddr) == tuple:
+			host, port = incomingAddr
+			incomingNodeHash = self.hasher(host+str(port))
+
+		elif type(incomingAddr) == str:
+			incomingNodeHash = self.hasher(incomingAddr)
 		# print("myHash", myHash, "nodeHash", incomingNodeHash, "predecessorHash", myPredecessorHash)
 		if incomingNodeHash < myHash and incomingNodeHash > myPredecessorHash: # i am his successor
 			# print("found")
@@ -365,6 +381,38 @@ class Node:
 		Responsible node should then replicate the file on appropriate node. SEE MANUAL FOR DETAILS. Responsible node should save the files
 		in directory given by host_port e.g. "localhost_20007/file.py".
 		'''
+		'''
+		DO NOT EDIT THIS FUNCTION.
+		You can use this function as follow:
+			For a node: self.hasher(node.host+str(node.port))
+			For a file: self.hasher(file)
+		'''
+		highestHash, haddr, hsuccessor, hpredecessor = self.findHighest()
+		lowestHash, laddr, lsuccessor, lpredecessor = self.findLowest()
+		fileHash = self.hasher(fileName)
+		if fileHash > highestHash:
+			sock = socket.socket()
+			sock.connect(hsuccessor)
+			self.sendFile(sock, fileName)
+			time.sleep(2)
+			sock.close()
+			print("sent 1")
+		elif fileHash < lowestHash:
+			sock = socket.socket()
+			sock.connect(lsuccessor)
+			self.sendFile(sock, fileName)
+			time.sleep(2)
+			sock.close()
+			print("sent 2")
+		else:
+			successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(fileName)
+			sock = socket.socket()
+			sock.connect((successorHost, successorPort))
+			self.sendFile(sock, fileName)
+			time.sleep(2)
+			sock.close()
+			print("sent 1")
+
 
 	def get(self, fileName):
 		'''
