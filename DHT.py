@@ -58,16 +58,14 @@ class Node:
 
 				host, port = msg["addr"]
 				incomingAddr = (host, port)
-				# print("incomingAddr", incomingAddr)
 				myHash = self.hasher(self.host+str(self.port))
 				mySuccessorHash = self.hasher(self.successor[0]+str(self.successor[1]))
 				myPredecessorHash = self.hasher(self.predecessor[0]+str(self.predecessor[1]))
 				incomingNodeHash = self.hasher(host+str(port))
+
 				if myHash == mySuccessorHash and myHash == myPredecessorHash:
 					self.successor = incomingAddr
-					self.predecessor = incomingAddr
-					mySuccessorHash = self.hasher(self.successor[0]+str(self.successor[1]))
-					
+					self.predecessor = incomingAddr					
 					msg = {
 					"type":"yourNeighbors",
 					"successor": (self.host, self.port),
@@ -75,24 +73,35 @@ class Node:
 					}
 				else:
 					# print("self.addr", (self.host, self.port), "self.successor", self.successor, "self.predecessor", self.predecessor)
-					successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(incomingAddr)
-					# print("successorHost", successorHost,"successorPort", successorPort)
-					if self.host == successorHost and self.port == successorPort:
+					highestHash, addr, successor, predecessor = self.findHighest()
+					if incomingNodeHash > highestHash:
 						msg = {
 							"type":"yourNeighbors",
-							"successor": (self.host, self.port),
-							"predecessor":self.predecessor
+							"successor": successor,
+							"predecessor":addr
 							}
-						self.predecessor = (host, port)
 					else:
-						msg = {
-							"type":"yourNeighbors",
-							"successor": (successorHost, successorPort),
-							"predecessor":(predecessorHost, predecessorPort)
-							}
+						successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(incomingAddr)
+						# print("successorHost", successorHost,"successorPort", successorPort)
+						if self.host == successorHost and self.port == successorPort:
+							msg = {
+								"type":"yourNeighbors",
+								"successor": (self.host, self.port),
+								"predecessor":self.predecessor
+								}
+							self.predecessor = (host, port)
+						else:
+							msg = {
+								"type":"yourNeighbors",
+								"successor": (successorHost, successorPort),
+								"predecessor":(predecessorHost, predecessorPort)
+								}
 			elif msgType == "updateYourSuccessor":
 				successorHost, successorPort = msg["successor"]
 				self.successor = (successorHost, successorPort)
+			elif msgType == "updateYourPredecessor":
+				predecessorHost, predecessorPort = msg["predecessor"]
+				self.predecessor = (predecessorHost, predecessorPort)
 
 			elif msgType == "findItsSuccessor":
 				print("finding")
@@ -111,6 +120,21 @@ class Node:
 						"successor": (successorHost, successorPort),
 						"predecessor":(predecessorHost, predecessorPort)
 					}
+			elif msgType == "whoHasHighestHash":
+				print("message reveived")
+				myHash = self.hasher(self.host+str(self.port))
+				highestHash, highestHashAddr, successor, predecessor = self.findHighest()
+				print("vaue returned")
+				msg = {
+					"type":"highestHash",
+					"value":highestHash,
+					"addr":highestHashAddr,
+					"successor":successor,
+					"predecessor":predecessor
+				}
+					
+
+
 
 			msg = dumps(msg)
 			client.send(msg.encode('utf-8'))
@@ -155,29 +179,34 @@ class Node:
 
 		else:
 			host, port = joiningAddr
-			sock = socket.socket()
-			sock.connect(joiningAddr)
-			msg = {
-				"type":"abMereKoToAndarLo",
-				"addr":(self.host, self.port)
-			}
-			msgSend = dumps(msg)
+			
 			try:
-				sock.sendto(msgSend.encode('utf-8'), (host, port))
-			except Exception as e:
-				print("socket communication error:", e)
+				sock = socket.socket()
+				sock.connect(joiningAddr)
+				msg = {
+					"type":"abMereKoToAndarLo",
+					"addr":(self.host, self.port)
+				}
+				msgSend = dumps(msg)
+				try:
+					sock.sendto(msgSend.encode('utf-8'), (host, port))
+				except Exception as e:
+					print("socket communication error:", e)
 
-			msgRecv = loads(sock.recv(1024))
-			msgType = msgRecv["type"]
-			if msgType == "yourNeighbors":
-				print("neighbors received")
-				successorHost, successorPort = msgRecv["successor"]
-				predecessorHost, predecessorPort = msgRecv["predecessor"]
-				self.successor = (successorHost, successorPort)
-				self.predecessor = (predecessorHost, predecessorPort)
-				self.tellPredecessor(self.predecessor)
-			time.sleep(2)
-			sock.close()
+				msgRecv = loads(sock.recv(1024))
+				msgType = msgRecv["type"]
+				if msgType == "yourNeighbors":
+					print("neighbors received")
+					successorHost, successorPort = msgRecv["successor"]
+					predecessorHost, predecessorPort = msgRecv["predecessor"]
+					self.successor = (successorHost, successorPort)
+					self.predecessor = (predecessorHost, predecessorPort)
+					self.tellPredecessor(self.predecessor)
+					self.tellSuccessor(self.successor)
+				time.sleep(2)
+				sock.close()
+			except Exception as e:
+				print("socket eror", e)
 
 
 
@@ -197,6 +226,49 @@ class Node:
 			print("socket error", e)
 		sock.close()
 
+	def tellSuccessor(self, successor):
+		sock = socket.socket()
+		sock.connect(successor)
+		msg = {
+			"type":"updateYourPredecessor",
+			"predecessor":(self.host, self.port)
+		}
+		msg = dumps(msg)
+		try:
+			sock.sendto(msg.encode('utf-8'), successor)
+		except Exception as e:
+			print("socket error", e)
+		sock.close()
+
+	def findHighest(self):
+		myHash = self.hasher(self.host+str(self.port))
+		mySuccessorHash = self.hasher(self.successor[0]+str(self.successor[1]))
+		if myHash >= mySuccessorHash:
+			return myHash, (self.host, self.port), self.successor, self.predecessor
+		
+		else:
+			sock = socket.socket()
+			sock.connect(self.successor)
+			msg = {
+				"type":"whoHasHighestHash"
+			}
+			
+			msgSend = dumps(msg)
+			sock.sendto(msgSend.encode('utf-8'), self.successor)
+			print("sent")
+			try:
+				msgRcv = loads(sock.recv(2056))
+			except:
+				print("no message to rcv")
+			msgType = msgRcv["type"]
+			print("1")
+			if msgType == "highestHash":
+				highestHash = msgRcv["value"]
+				host, port = msgRcv["addr"]
+				successorHost, successorPort = msgRcv["successor"]
+				predecessorHost, predecessorPort = msgRcv["predecessor"]
+				print("2")
+				return highestHash, (host, port), (successorHost, successorPort), (predecessorHost, predecessorPort)
 
 	def lookup(self, incomingAddr):
 		#I am the only node in the network
