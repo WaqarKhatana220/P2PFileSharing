@@ -136,22 +136,25 @@ class Node:
 
 				elif msgType == "sendingFile":
 					fileName = msg["fileName"]
+					self.files.append(fileName)
+
 					# print("receiving file initiated")
 					fileName = "localhost_"+str(self.port)+"/"+fileName
 					# directory = os.path.join(directory, fileName)
 					# print("directory", directory)
-					print("receiveing file", fileName, "at", self.port)
+					# print("receiveing file", fileName, "at", self.port)
 					self.recieveFile(client, fileName)
 					# print("received")
+					print("myFiles", self.files)
 
 
-				elif msgType == "findItsNode":
-					fileName = msg["fileName"]
-					successorHost, successorPort = self.fileLookup(fileName)
-					msg = {
-						"type":"itsNode",
-						"addr":(successorHost, successorPort)
-					}
+				# elif msgType == "findItsNode":
+				# 	fileName = msg["fileName"]
+				# 	successorHost, successorPort = self.fileLookup(fileName)
+				# 	msg = {
+				# 		"type":"itsNode",
+				# 		"addr":(successorHost, successorPort)
+				# 	}
 					
 
 
@@ -251,6 +254,7 @@ class Node:
 		This function handles the logic of a node joining. This function should do a lot of things such as:
 		Update successor, predecessor, getting files, back up files. SEE MANUAL FOR DETAILS.
 		'''
+		print("Node", self.port, "hash", self.hasher(self.host+str(self.port)))
 
 		if joiningAddr == "":
 			self.successor = (self.host, self.port)
@@ -393,7 +397,7 @@ class Node:
 			incomingNodeHash = self.hasher(incomingAddr)
 		# print("myHash", myHash, "nodeHash", incomingNodeHash, "predecessorHash", myPredecessorHash)
 		if incomingNodeHash < myHash and incomingNodeHash > myPredecessorHash: # i am his successor
-			print("successor returned", self.port)
+			# print("successor returned", self.port)
 			predHost, predPort = self.predecessor
 			return(self.host, self.port, predHost, predPort)
 		else:
@@ -426,40 +430,34 @@ class Node:
 
 
 
-	def fileLookup(self, fileName):
-		myHash = self.hasher(self.host+str(self.port))
-		fileHash = self.hasher(fileName)
-		myPredecessorHash = self.hasher(self.predecessor[0]+str(self.predecessor[1]))
+	# def fileLookup(self, fileName):
+	# 	myHash = self.hasher(self.host+str(self.port))
+	# 	fileHash = self.hasher(fileName)
+	# 	myPredecessorHash = self.hasher(self.predecessor[0]+str(self.predecessor[1]))
 
-		if fileHash < myHash and fileHash > myPredecessorHash:
-			return self.host, self.port
-		else:
-			sock = socket.socket()
-			sock.connect(self.successor)
-			msg = {
-				"type":"findItsNode",
-				"fileName":fileName
-			}
-			msgSend = dumps(msg)
-			sock.sendto(msgSend.encode('utf-8'), self.successor)
+	# 	if fileHash < myHash and fileHash > myPredecessorHash:
+	# 		return self.host, self.port
+	# 	else:
+	# 		sock = socket.socket()
+	# 		sock.connect(self.successor)
+	# 		msg = {
+	# 			"type":"findItsNode",
+	# 			"fileName":fileName
+	# 		}
+	# 		msgSend = dumps(msg)
+	# 		sock.sendto(msgSend.encode('utf-8'), self.successor)
 
-			msgRcv = loads(sock.recv(1024))
-			if msgRcv["type"] == "itsNode":
-				nodeHost, nodePort = msgRcv["addr"]
-				return nodeHost, nodePort
-			sock.close()
+	# 		msgRcv = loads(sock.recv(1024))
+	# 		if msgRcv["type"] == "itsNode":
+	# 			nodeHost, nodePort = msgRcv["addr"]
+	# 			return nodeHost, nodePort
+	# 		sock.close()
 
 	def put(self, fileName):
 		'''
 		This function should first find node responsible for the file given by fileName, then send the file over the socket to that node
 		Responsible node should then replicate the file on appropriate node. SEE MANUAL FOR DETAILS. Responsible node should save the files
 		in directory given by host_port e.g. "localhost_20007/file.py".
-		'''
-		'''
-		DO NOT EDIT THIS FUNCTION.
-		You can use this function as follow:
-			For a node: self.hasher(node.host+str(node.port))
-			For a file: self.hasher(file)
 		'''
 		print("put file", fileName)
 		highestHash, haddr, hsuccessor, hpredecessor = self.findHighest()
@@ -470,14 +468,14 @@ class Node:
 			sock = socket.socket()
 			sock.connect(hsuccessor)
 			print("sending to highest hash", hsuccessor)
-			print("highestHash", highestHash, "filehash", fileHash)
+			print("highestHashSuccessor", self.hasher(hsuccessor[0]+str(hsuccessor[1])), "filehash", fileHash)
 			msg = {
 				"type":"sendingFile",
 				"fileName":fileName
 			}
 			msgSend = dumps(msg)
 			sock.sendto(msgSend.encode('utf-8'), hsuccessor)
-			time.sleep(5)
+			time.sleep(1)
 			# directory = "/localhost_"+str(hsuccessor[1])
 			# fileName = os.path.join(directory, fileName)
 			# print("sending to:", hsuccessor[1])
@@ -497,7 +495,7 @@ class Node:
 			}
 			msgSend = dumps(msg)
 			sock.sendto(msgSend.encode('utf-8'), laddr)
-			time.sleep(5)
+			time.sleep(1)
 			# directory = "/localhost_"+str(lsuccessor[1])
 			# fileName = os.path.join(directory, fileName)
 			# print("sending to:", lsuccessor[1])
@@ -508,7 +506,7 @@ class Node:
 		else:
 			successorHost, successorPort, predecessorHost, predecessorPort = self.lookup(fileName)
 			print("successor got", successorPort)
-			print("fileHash", fileHash, "successorHash", self.hasher(successorHost+str(successorPort)))
+			# print("fileHash", fileHash, "successorHash", self.hasher(successorHost+str(successorPort)))
 			sock = socket.socket()
 			sock.connect((successorHost, successorPort))
 			msg = {
@@ -517,10 +515,10 @@ class Node:
 			}
 			msgSend = dumps(msg)
 			sock.sendto(msgSend.encode('utf-8'), (successorHost, successorPort))
-			time.sleep(5)
+			time.sleep(1)
 			# directory = "/localhost_"+str(successorPort)
 			# fileName = os.path.join(directory, fileName)
-			print("sending to:", successorPort)
+			print("sending to:", successorPort, "fileHash", fileHash)
 
 			self.sendFile(sock, fileName)
 			# print("sending")
