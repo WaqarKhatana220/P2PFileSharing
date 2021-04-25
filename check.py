@@ -149,7 +149,10 @@ def testFileRehashing(nodes, files, sp):
 	for i in range(len(files)):
 		for j in range(len(nodes)):
 			if nodes[j].hasher(files[i]) <= nodes[j].key and nodes[j].hasher(files[i]) > nodes[j-1].key or nodes[j].hasher(files[i]) > nodes[-1].key and i == 0:
+				print("file", files[i],"should be on node with key", nodes[j].key)
+
 				if files[i] not in nodes[j].files:
+					print("file", files[i], "not found")
 					correct = False
 	if correct:
 		print ("All files rehashed successfully. \t(+5)")

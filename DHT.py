@@ -26,9 +26,7 @@ class Node:
 		# Set value of the following variables appropriately to pass Intialization test
 		self.predecessor = (host, port)
 		self.successor = (host, port)
-		self.highestHash = self.hasher(self.host+str(self.port))
-		self.lowestHash = self.hasher(self.host+str(self.port))
-
+	
 		# additional state variables
 
 
@@ -60,23 +58,10 @@ class Node:
 			msg = loads(msg)
 			# print("message", msg)
 			if type(msg) == str:
-				print("receiving file initiated")
-				fileName = "localhost_"+str(self.port)+"/"+"fileName"
-				# directory = os.path.join(directory, fileName)
-				# print("directory", directory)
-				print("receiveing file", fileName)
-				try:
-					self.recieveFile(client, fileName)
-				except Exception as e:
-					print("recv failed due to:", e)
-				# print("received")
-				
-				# print("yes")
-				# self.recieveFile(client, x)
-				# print("received")
-			# print("msg", msg)
+				pass
 			else:
 				msgType = msg["type"]
+				# print("receivedtype", msgType)
 				if msgType == "abMereKoToAndarLo":
 
 					host, port = msg["addr"]
@@ -174,8 +159,7 @@ class Node:
 						client.send((dumps(msg)).encode('utf-8'))
 						time.sleep(4)
 						msg = ""
-			
-
+		
 
 					
 				elif msgType == "findItsSuccessor":
@@ -233,13 +217,62 @@ class Node:
 						"successor":successor,
 						"predecessor":predecessor
 					}
+				
+				elif msgType == "doYouHaveFiles":
+					print("doyouHaveFiles Called")
+					check = False
+					if len(self.files) != 0:
+						hashReceived = msg["hash"]
+						for i in range(len(self.files)):
+							# print("checking", self.files[i])
+							if self.hasher(self.files[i]) <= hashReceived:
+								check = True
+								break
+					if check:
+						msg = {
+							"type":"yes"
+						}
+					else:
+						msg = {
+							"type":"no"
+						}								
+
+					
+				elif msgType == "sendMyFiles":
+					removedFiles = []
+					hashReceived = msg["hash"]
+					for i in range(len(self.files)):
+						if self.hasher(self.files[i]) <= hashReceived:
+							msg = {
+								"type":"here",
+								"fileName":self.files[i]
+							}
+							msgSend = dumps(msg)
+							client.send(msgSend.encode('utf-8'))
+							time.sleep(5)
+							fileName = "localhost_"+str(self.port)+"/"+self.files[i]
+							try:
+								self.sendFile(client, fileName)
+								time.sleep(5)
+							except:
+								print("Exception raised")
+								self.sendFile(client, fileName)
+
+							removedFiles.append(self.files[i])
+
+					for i in self.files:
+						if i in removedFiles:
+							self.files.remove(i)
+							
+					time.sleep(5)
+					msg = ""
+							
 						
 
 
 
 				msg = dumps(msg)
 				client.send(msg.encode('utf-8'))
-				client.close()
 
 
 
@@ -305,6 +338,7 @@ class Node:
 					self.predecessor = (predecessorHost, predecessorPort)
 					self.tellPredecessor(self.predecessor)
 					self.tellSuccessor(self.successor)
+					self.getFiles(self.successor)
 				time.sleep(2)
 				sock.close()
 			except Exception as e:
@@ -328,6 +362,8 @@ class Node:
 			print("socket error", e)
 		sock.close()
 
+
+
 	def tellSuccessor(self, successor):
 		sock = socket.socket()
 		sock.connect(successor)
@@ -340,7 +376,56 @@ class Node:
 			sock.sendto(msg.encode('utf-8'), successor)
 		except Exception as e:
 			print("socket error", e)
-		sock.close()
+
+		
+
+	def getFiles(self, successor):
+		sock = socket.socket()
+		sock.connect(successor)
+		msg = {
+			"type":"doYouHaveFiles",
+			"hash":self.hasher(self.host+str(self.port))
+		}
+		msgSend= dumps(msg)
+		sock.sendto(msgSend.encode('utf-8'), successor)
+		# print("asked for files, waiting for rweply")
+
+		# time.sleep(2)
+		msgRcv = loads(sock.recv(1024))
+		# print("msgRcved", msgRcv)
+		if msgRcv["type"] == "yes":
+			print("yes")
+			# time.sleep(2)
+			self.snatchFiles()
+		elif msgRcv["type"] == "no":
+			print("no")
+		# time.sleep(5)
+		
+	def snatchFiles(self):
+		sock = socket.socket()
+		sock.connect(self.successor)
+		msg = {
+			"type":"sendMyFiles",
+			"hash":self.hasher(self.host+str(self.port))
+		}
+		msgSend = dumps(msg)
+		sock.sendto(msgSend.encode('utf-8'), self.successor)
+		# time.sleep(2)
+		msgRcv = loads(sock.recv(1024))
+		if msgRcv["type"] == "here":
+			fileName = msgRcv["fileName"]
+			print("receiving file", fileName)
+			self.files.append(fileName)
+			fileName = "localhost_"+str(self.port)+"/"+fileName
+			self.recieveFile(sock, fileName)
+			print("received file", fileName)
+			# time.sleep(2)
+		
+
+
+
+
+
 
 	def findHighest(self):
 		myHash = self.hasher(self.host+str(self.port))
@@ -448,29 +533,6 @@ class Node:
 
 
 
-
-	# def fileLookup(self, fileName):
-	# 	myHash = self.hasher(self.host+str(self.port))
-	# 	fileHash = self.hasher(fileName)
-	# 	myPredecessorHash = self.hasher(self.predecessor[0]+str(self.predecessor[1]))
-
-	# 	if fileHash < myHash and fileHash > myPredecessorHash:
-	# 		return self.host, self.port
-	# 	else:
-	# 		sock = socket.socket()
-	# 		sock.connect(self.successor)
-	# 		msg = {
-	# 			"type":"findItsNode",
-	# 			"fileName":fileName
-	# 		}
-	# 		msgSend = dumps(msg)
-	# 		sock.sendto(msgSend.encode('utf-8'), self.successor)
-
-	# 		msgRcv = loads(sock.recv(1024))
-	# 		if msgRcv["type"] == "itsNode":
-	# 			nodeHost, nodePort = msgRcv["addr"]
-	# 			return nodeHost, nodePort
-	# 		sock.close()
 
 	def put(self, fileName):
 		'''
