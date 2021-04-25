@@ -106,7 +106,7 @@ def testPutandGet(nodes, files):
 		for j in range(len(nodes)):
 			# print("total files", len(files), "nodes", len(nodes))
 			if (fileHashes[i] <= nodes[j].key and fileHashes[i] > nodes[j-1].key) or (fileHashes[i] > nodes[-1].key and j == 0):
-				print("file", files[i], "hash", fileHashes[i], "should be on node with key", nodes[j].key)
+				# print("file", files[i], "hash", fileHashes[i], "should be on node with key", nodes[j].key)
 				if files[i] not in nodes[j].files:
 					print("not found")
 					correct = False
@@ -121,7 +121,7 @@ def testPutandGet(nodes, files):
 	time.sleep(4)
 	print ("Checking for a file placed on DHT.")
 	if nodes[0].get(files[0]) == None:
-		print ("Could not retrieve a file placed on DHT.")
+		print ("Could not retrieve a file placed on DHT.", files[0])
 		print ("Get failed. \t(0)")
 		return points
 	print ("Checking for files not put originally.")
